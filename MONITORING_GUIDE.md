@@ -47,7 +47,16 @@ chmod +x start-monitoring.sh stop-monitoring.sh
 - **Kibana**: http://localhost:5601
 - **Flower**: http://localhost/flower
 
-### 3. Stop Everything
+### 3. Scale Workers for Performance
+```bash
+# Scale to 3 worker containers (12 concurrent tasks)
+./scripts/scale_workers.sh scale 3
+
+# Check worker status
+./scripts/scale_workers.sh status
+```
+
+### 4. Stop Everything
 ```bash
 ./stop-monitoring.sh
 ```
@@ -295,6 +304,331 @@ Directory: `monitoring/logstash/pipeline/`
 
 #### Filebeat Configuration
 File: `monitoring/filebeat/filebeat.yml`
+
+## ⚙️ Celery Worker Scaling & Management
+
+### Overview
+The Face Recognition Pipeline uses Celery workers for background processing of face detection and recognition tasks. Proper worker scaling is crucial for optimal performance.
+
+### Current Configuration
+
+#### Default Setup
+- **Worker Containers**: 2 (can be scaled 1-10)
+- **Concurrency per Worker**: 4 threads
+- **Total Concurrent Tasks**: 8 (2 × 4)
+- **Worker Pool**: Thread-based (optimized for I/O-heavy operations)
+- **Queue Backend**: Redis
+
+#### Performance Characteristics
+```
+┌─────────────────┬─────────┬─────────┬──────────────────┐
+│ Configuration   │ Workers │ Threads │ Concurrent Tasks │
+├─────────────────┼─────────┼─────────┼──────────────────┤
+│ Light Load      │   1-2   │    4    │      4-8         │
+│ Medium Load     │   3-4   │    4    │     12-16        │
+│ Heavy Load      │   5-8   │    4    │     20-32        │
+│ Maximum         │   10    │    4    │       40         │
+└─────────────────┴─────────┴─────────┴──────────────────┘
+```
+
+### Worker Scaling Script
+
+#### Basic Usage
+```bash
+# Make script executable (first time only)
+chmod +x scripts/scale_workers.sh
+
+# Scale to 3 workers (12 concurrent tasks)
+./scripts/scale_workers.sh scale 3
+
+# Check current worker status
+./scripts/scale_workers.sh status
+
+# Restart all workers
+./scripts/scale_workers.sh restart
+
+# Stop all workers
+./scripts/scale_workers.sh stop
+
+# Start workers with default config
+./scripts/scale_workers.sh start
+```
+
+#### Advanced Usage Examples
+```bash
+# Scale for different workloads
+./scripts/scale_workers.sh scale 1   # Light: 4 concurrent tasks
+./scripts/scale_workers.sh scale 3   # Medium: 12 concurrent tasks
+./scripts/scale_workers.sh scale 5   # Heavy: 20 concurrent tasks
+./scripts/scale_workers.sh scale 8   # Maximum: 32 concurrent tasks
+
+# Get help
+./scripts/scale_workers.sh help
+```
+
+### Worker Monitoring
+
+#### Flower Dashboard
+- **URL**: http://localhost/flower
+- **Features**: Real-time worker monitoring, task tracking, statistics
+- **Metrics**: Active tasks, processed tasks, worker status, queue length
+
+#### Worker Status Script Output
+```bash
+./scripts/scale_workers.sh status
+```
+**Sample Output:**
+```
+=== Celery Worker Status ===
+
+📦 Running Celery Containers:
+NAME                           COMMAND                  STATUS    PORTS
+face-recognition-celery-1      celery -A celery_tasks…  Up        
+face-recognition-celery-2      celery -A celery_tasks…  Up        
+face-recognition-celery-3      celery -A celery_tasks…  Up        
+
+🌸 Worker Statistics (via Flower):
+{
+  "worker1@hostname": {
+    "active": 2,
+    "processed": 156,
+    "status": true
+  }
+}
+
+📊 Redis Queue Status:
+Pending tasks in queue: 5
+```
+
+### Performance Guidelines
+
+#### Choosing Worker Count
+
+**Light Load (1-10 files/hour)**
+- **Workers**: 1-2
+- **Concurrent Tasks**: 4-8
+- **Use Case**: Small batch processing, development
+
+**Medium Load (10-50 files/hour)**
+- **Workers**: 3-4
+- **Concurrent Tasks**: 12-16
+- **Use Case**: Regular production workload
+
+**Heavy Load (50-200 files/hour)**
+- **Workers**: 5-8
+- **Concurrent Tasks**: 20-32
+- **Use Case**: High-volume processing, bulk imports
+
+**Maximum Load (200+ files/hour)**
+- **Workers**: 8-10
+- **Concurrent Tasks**: 32-40
+- **Use Case**: Enterprise workloads, continuous processing
+
+#### Resource Considerations
+
+**Memory Usage per Worker**
+- Base: ~500MB
+- With AI models loaded: ~1-2GB
+- Peak processing: +500MB per concurrent task
+
+**CPU Usage**
+- Face detection: CPU-intensive
+- Feature extraction: Mixed CPU/GPU
+- Database operations: I/O-bound
+
+**GPU Utilization**
+- Single GPU shared across all workers
+- Thread-based pool allows efficient GPU sharing
+- Monitor GPU memory usage in high-concurrency scenarios
+
+### Docker Compose Scaling
+
+#### Manual Scaling
+```bash
+# Scale using docker-compose directly
+docker-compose up -d --scale celery=5
+
+# Check scaled containers
+docker-compose ps celery
+
+# View logs from all workers
+docker-compose logs -f celery
+
+# View logs from specific worker
+docker-compose logs -f face-recognition-pipeline-celery-3
+```
+
+#### Environment Configuration
+File: `.env`
+```env
+# Celery Worker Configuration
+CELERY_WORKER_CONCURRENCY=4      # Threads per worker
+CELERY_WORKER_POOL=threads        # Worker pool type
+CELERY_WORKER_REPLICAS=2          # Default worker count
+```
+
+### Worker Health Monitoring
+
+#### Prometheus Metrics
+Monitor worker performance via metrics:
+
+- `celery_workers_active` - Number of active workers
+- `celery_tasks_pending` - Tasks waiting in queue
+- `celery_tasks_active` - Currently processing tasks
+- `celery_tasks_processed_total` - Total processed tasks
+- `celery_task_duration_seconds` - Task processing time
+
+#### Grafana Dashboard
+Worker metrics are included in the main dashboard:
+- Worker container status
+- Task processing rates
+- Queue length trends
+- Processing time percentiles
+
+#### Alerts for Worker Issues
+Configured alerts in `monitoring/prometheus/alerts.yml`:
+
+```yaml
+# High task queue length
+- alert: HighCeleryQueueLength
+  expr: celery_tasks_pending > 50
+  for: 5m
+  labels:
+    severity: warning
+  annotations:
+    description: "Celery queue has {{ $value }} pending tasks"
+
+# Worker down
+- alert: CeleryWorkerDown
+  expr: up{job="celery"} == 0
+  for: 2m
+  labels:
+    severity: critical
+  annotations:
+    description: "Celery worker {{ $labels.instance }} is down"
+
+# Long processing time
+- alert: SlowTaskProcessing
+  expr: avg(celery_task_duration_seconds) > 300
+  for: 10m
+  labels:
+    severity: warning
+  annotations:
+    description: "Average task processing time is {{ $value }}s"
+```
+
+### Troubleshooting Workers
+
+#### Common Issues
+
+**Workers Not Processing Tasks**
+```bash
+# Check worker logs
+docker-compose logs celery
+
+# Check Redis connection
+docker-compose exec redis redis-cli ping
+
+# Restart workers
+./scripts/scale_workers.sh restart
+```
+
+**High Memory Usage**
+```bash
+# Check container memory usage
+docker stats
+
+# Reduce worker count
+./scripts/scale_workers.sh scale 2
+
+# Check for memory leaks in logs
+docker-compose logs celery | grep -i memory
+```
+
+**Task Queue Buildup**
+```bash
+# Check queue length
+docker-compose exec redis redis-cli llen celery
+
+# Scale up workers
+./scripts/scale_workers.sh scale 6
+
+# Purge queue if needed (CAUTION)
+docker-compose exec redis redis-cli del celery
+```
+
+**GPU Memory Issues**
+```bash
+# Check GPU usage
+nvidia-smi
+
+# Reduce concurrent tasks per worker
+# Edit docker-compose.yml: --concurrency=2
+docker-compose up -d celery
+```
+
+#### Performance Tuning
+
+**Optimize for Throughput**
+```bash
+# More workers, standard concurrency
+./scripts/scale_workers.sh scale 6
+```
+
+**Optimize for Large Files**
+```bash
+# Fewer workers, higher memory per worker
+./scripts/scale_workers.sh scale 2
+# Edit docker-compose.yml to increase memory limits
+```
+
+**Optimize for Mixed Workload**
+```bash
+# Balanced configuration
+./scripts/scale_workers.sh scale 4
+```
+
+### Auto-scaling (Advanced)
+
+#### Queue-based Auto-scaling
+For production environments, consider implementing auto-scaling based on queue length:
+
+```bash
+#!/bin/bash
+# Auto-scaling script example
+QUEUE_LENGTH=$(docker-compose exec -T redis redis-cli llen celery)
+CURRENT_WORKERS=$(docker-compose ps -q celery | wc -l)
+
+if [ "$QUEUE_LENGTH" -gt 20 ] && [ "$CURRENT_WORKERS" -lt 6 ]; then
+    ./scripts/scale_workers.sh scale $((CURRENT_WORKERS + 1))
+elif [ "$QUEUE_LENGTH" -lt 5 ] && [ "$CURRENT_WORKERS" -gt 2 ]; then
+    ./scripts/scale_workers.sh scale $((CURRENT_WORKERS - 1))
+fi
+```
+
+#### Kubernetes Horizontal Pod Autoscaler
+For Kubernetes deployments:
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: celery-worker-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: celery-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: celery_tasks_pending
+      target:
+        type: AverageValue
+        averageValue: "10"
+```
 
 ## 📊 Monitoring Best Practices
 

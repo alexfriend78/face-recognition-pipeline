@@ -72,6 +72,7 @@ services:
       ENVIRONMENT: production
       SERVICE_VERSION: "1.0.0"
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      CELERY_WORKER_CONCURRENCY: 4
     volumes:
       - ./data:/app/data
       - ./models:/app/models
@@ -80,7 +81,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A celery_tasks worker --loglevel=info
+    command: celery -A celery_tasks worker --loglevel=info --concurrency=4 --pool=threads
+    deploy:
+      replicas: 2
 
   flower:
     build: .

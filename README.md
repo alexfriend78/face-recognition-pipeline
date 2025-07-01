@@ -89,7 +89,20 @@ This will start all required services:
 - **ELK Stack** (Log Aggregation & Analysis)
 - **Infrastructure Monitoring** (Node, Redis, Postgres exporters)
 
-### 3. Access the Application
+### 3. Scale Workers for Better Performance (Optional)
+
+```bash
+# Scale to 3 worker containers (12 concurrent tasks total)
+./scripts/scale_workers.sh scale 3
+
+# Check worker status
+./scripts/scale_workers.sh status
+
+# Restart workers if needed
+./scripts/scale_workers.sh restart
+```
+
+### 4. Access the Application
 
 #### Core Services
 - **Main Interface**: http://localhost
@@ -298,6 +311,53 @@ SECRET_KEY=your-secret-key-here
 UPLOAD_FOLDER=/app/data/raw
 PROCESSED_FOLDER=/app/data/processed
 EMBEDDINGS_FOLDER=/app/data/embeddings
+
+# Celery Worker Configuration
+CELERY_WORKER_CONCURRENCY=4
+CELERY_WORKER_POOL=threads
+CELERY_WORKER_REPLICAS=2
+```
+
+### Celery Worker Scaling
+
+The application now supports improved worker scaling for better performance:
+
+#### Current Configuration
+- **Default Setup**: 2 worker containers, 4 threads each = **8 concurrent tasks**
+- **Worker Pool**: Thread-based for better I/O performance
+- **Auto-scaling**: Use the provided scripts for easy scaling
+
+#### Scaling Workers
+
+```bash
+# Scale to different worker counts
+./scripts/scale_workers.sh scale 1   # 4 concurrent tasks
+./scripts/scale_workers.sh scale 3   # 12 concurrent tasks  
+./scripts/scale_workers.sh scale 5   # 20 concurrent tasks
+
+# Check current worker status
+./scripts/scale_workers.sh status
+
+# Restart all workers
+./scripts/scale_workers.sh restart
+
+# Stop all workers
+./scripts/scale_workers.sh stop
+```
+
+#### Performance Guidelines
+- **Light Load**: 1-2 workers (4-8 concurrent tasks)
+- **Medium Load**: 3-4 workers (12-16 concurrent tasks)
+- **Heavy Load**: 5-8 workers (20-32 concurrent tasks)
+- **Maximum**: 10 workers (40 concurrent tasks)
+
+#### Manual Docker Compose Scaling
+```bash
+# Scale workers using docker-compose directly
+docker-compose up -d --scale celery=3
+
+# View worker containers
+docker-compose ps celery
 ```
 
 ### Database Configuration
