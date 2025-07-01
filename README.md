@@ -33,7 +33,7 @@ A complete face recognition system built with Python, Flask, and Docker that aut
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/face-recognition-pipeline.git
+git clone https://github.com/alexfriend78/face-recognition-pipeline
 cd face-recognition-pipeline
 ```
 
