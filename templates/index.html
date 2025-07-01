@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Recognition Pipeline</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        .drop-zone {
+            transition: all 0.3s ease;
+        }
+        .drop-zone.dragover {
+            background-color: #e0e7ff;
+            border-color: #6366f1;
+            transform: scale(1.02);
+        }
+        .face-card {
+            transition: all 0.3s ease;
+        }
+        .face-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .processing {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold text-gray-800">Face Recognition Pipeline</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button onclick="showUploadSection()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Upload</button>
+                    <button onclick="showSearchSection()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Search</button>
+                    <button onclick="showFilesSection()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Files</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Statistics Bar -->
+    <div class="bg-indigo-600 text-white py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div>
+                    <div class="text-2xl font-bold" id="stat-files">0</div>
+                    <div class="text-sm">Total Files</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold" id="stat-faces">0</div>
+                    <div class="text-sm">Total Faces</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold" id="stat-processing">0</div>
+                    <div class="text-sm">Processing</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold" id="stat-completed">0</div>
+                    <div class="text-sm">Completed</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Upload Section -->
+        <div id="upload-section" class="space-y-6">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-4">Upload Files</h2>
+                
+                <!-- Drop Zone -->
+                <div id="drop-zone" class="drop-zone border-4 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer hover:border-indigo-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <p class="mt-4 text-lg text-gray-600">Drop files here or click to upload</p>
+                    <p class="mt-2 text-sm text-gray-500">Support for images (JPG, PNG) and videos (MP4, AVI)</p>
+                    <input type="file" id="file-input" class="hidden" accept="image/*,video/*" multiple>
+                </div>
+
+                <!-- Upload Progress -->
+                <div id="upload-progress" class="mt-6 space-y-4 hidden">
+                    <!-- Progress items will be added here dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div id="search-section" class="space-y-6 hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-4">Search Faces</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Query Image Upload -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Upload Query Image</label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                            <input type="file" id="search-input" accept="image/*" class="hidden">
+                            <img id="query-preview" class="mx-auto max-h-48 hidden mb-4">
+                            <button onclick="document.getElementById('search-input').click()" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                                Select Image
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Search Parameters -->
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Similarity Threshold</label>
+                            <input type="range" id="threshold" min="0.4" max="0.9" step="0.05" value="0.6" class="w-full">
+                            <span id="threshold-value" class="text-sm text-gray-600">0.6</span>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Max Results</label>
+                            <input type="number" id="max-results" min="5" max="100" value="20" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                        </div>
+                        
+                        <button onclick="performSearch()" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                            Search
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Search Results -->
+                <div id="search-results" class="mt-8 hidden">
+                    <h3 class="text-lg font-semibold mb-4">Search Results</h3>
+                    <div id="results-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        <!-- Results will be added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Files Section -->
+        <div id="files-section" class="space-y-6 hidden">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-bold mb-4">Uploaded Files</h2>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filename</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Upload Time</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Faces</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="files-table" class="bg-white divide-y divide-gray-200">
+                            <!-- Files will be added here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Face Details Modal -->
+    <div id="face-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Face Details</h3>
+                    <button onclick="closeFaceModal()" class="text-gray-400 hover:text-gray-500">
+                        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="face-details-content" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <!-- Face details will be added here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // WebSocket connection
+        const socket = io();
+        
+        // Current section
+        let currentSection = 'upload';
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            setupDropZone();
+            setupSearchInput();
+            updateStats();
+            setInterval(updateStats, 5000); // Update stats every 5 seconds
+            
+            // Threshold slider
+            document.getElementById('threshold').addEventListener('input', function(e) {
+                document.getElementById('threshold-value').textContent = e.target.value;
+            });
+        });
+        
+        // Section navigation
+        function showUploadSection() {
+            showSection('upload');
+        }
+        
+        function showSearchSection() {
+            showSection('search');
+        }
+        
+        function showFilesSection() {
+            showSection('files');
+            loadFiles();
+        }
+        
+        function showSection(section) {
+            document.querySelectorAll('[id$="-section"]').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`${section}-section`).classList.remove('hidden');
+            currentSection = section;
+        }
+        
+        // Drop zone setup
+        function setupDropZone() {
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+            
+            dropZone.addEventListener('click', () => fileInput.click());
+            
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+            });
+        }
+        
+        // File upload handling
+        function handleFiles(files) {
+            Array.from(files).forEach(file => uploadFile(file));
+        }
+        
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Show progress
+            const progressId = `progress-${Date.now()}`;
+            const progressHtml = `
+                <div id="${progressId}" class="border rounded-lg p-4">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm font-medium">${file.name}</span>
+                        <span class="text-sm text-gray-500 status">Uploading...</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div class="progress-bar bg-indigo-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-600 progress-text"></div>
+                </div>
+            `;
+            
+            document.getElementById('upload-progress').classList.remove('hidden');
+            document.getElementById('upload-progress').insertAdjacentHTML('beforeend', progressHtml);
+            
+            // Upload file
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    monitorTask(data.task_id, progressId);
+                } else {
+                    updateProgress(progressId, 0, 'Error: ' + data.error, 'failed');
+                }
+            })
+            .catch(error => {
+                updateProgress(progressId, 0, 'Error: ' + error.message, 'failed');
+            });
+        }
+        
+        // Task monitoring
+        function monitorTask(taskId, progressId) {
+            const interval = setInterval(() => {
+                fetch(`/task-status/${taskId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const progress = (data.current / data.total) * 100;
+                        updateProgress(progressId, progress, data.status, data.state);
+                        
+                        if (data.state === 'SUCCESS' || data.state === 'FAILURE') {
+                            clearInterval(interval);
+                            updateStats();
+                        }
+                    });
+            }, 1000);
+        }
+        
+        function updateProgress(progressId, percent, text, status) {
+            const element = document.getElementById(progressId);
+            if (element) {
+                element.querySelector('.progress-bar').style.width = `${percent}%`;
+                element.querySelector('.progress-text').textContent = text;
+                element.querySelector('.status').textContent = status;
+                
+                if (status === 'SUCCESS') {
+                    element.classList.add('bg-green-50');
+                } else if (status === 'FAILURE') {
+                    element.classList.add('bg-red-50');
+                }
+            }
+        }
+        
+        // Search functionality
+        function setupSearchInput() {
+            const searchInput = document.getElementById('search-input');
+            searchInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        document.getElementById('query-preview').src = e.target.result;
+                        document.getElementById('query-preview').classList.remove('hidden');
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+        }
+        
+        function performSearch() {
+            const searchInput = document.getElementById('search-input');
+            const file = searchInput.files[0];
+            
+            if (!file) {
+                alert('Please select an image to search');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('threshold', document.getElementById('threshold').value);
+            formData.append('top_k', document.getElementById('max-results').value);
+            
+            // Show loading
+            document.getElementById('search-results').classList.remove('hidden');
+            document.getElementById('results-grid').innerHTML = '<div class="col-span-full text-center processing">Searching...</div>';
+            
+            fetch('/search', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                displaySearchResults(data);
+            })
+            .catch(error => {
+                alert('Search error: ' + error.message);
+            });
+        }
+        
+        function displaySearchResults(data) {
+            const resultsGrid = document.getElementById('results-grid');
+            
+            if (data.status === 'error') {
+                resultsGrid.innerHTML = `<div class="col-span-full text-center text-red-600">${data.message}</div>`;
+                return;
+            }
+            
+            if (!data.results || data.results.length === 0) {
+                resultsGrid.innerHTML = '<div class="col-span-full text-center text-gray-600">No matching faces found</div>';
+                return;
+            }
+            
+            resultsGrid.innerHTML = data.results.map(result => `
+                <div class="face-card bg-white rounded-lg shadow p-2 cursor-pointer" onclick="showFaceDetails('${result.face_id}')">
+                    <img src="/face-image/${result.face_id}" class="w-full h-32 object-cover rounded mb-2">
+                    <div class="text-xs text-gray-600">
+                        <div>Similarity: ${(result.similarity * 100).toFixed(1)}%</div>
+                        <div>File: ${result.file_name}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // File listing
+        function loadFiles() {
+            fetch('/files')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('files-table');
+                    tbody.innerHTML = data.files.map(file => `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${file.filename}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${file.file_type}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${new Date(file.upload_time).toLocaleString()}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    ${file.processing_status === 'completed' ? 'bg-green-100 text-green-800' : 
+                                      file.processing_status === 'processing' ? 'bg-yellow-100 text-yellow-800' : 
+                                      file.processing_status === 'failed' ? 'bg-red-100 text-red-800' : 
+                                      'bg-gray-100 text-gray-800'}">
+                                    ${file.processing_status}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${file.total_faces}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button onclick="viewFileFaces(${file.id})" class="text-indigo-600 hover:text-indigo-900">View Faces</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                });
+        }
+        
+        // View faces from a file
+        function viewFileFaces(fileId) {
+            fetch(`/faces/${fileId}`)
+                .then(response => response.json())
+                .then(data => {
+                    showFaceModal(data.faces);
+                });
+        }
+        
+        // Show face modal
+        function showFaceModal(faces) {
+            const modal = document.getElementById('face-modal');
+            const content = document.getElementById('face-details-content');
+            
+            content.innerHTML = faces.map(face => `
+                <div class="face-card bg-gray-50 rounded-lg p-3">
+                    <img src="/face-image/${face.face_id}" class="w-full h-32 object-cover rounded mb-2">
+                    <div class="text-xs space-y-1">
+                        <div>Quality: ${(face.quality_score * 100).toFixed(1)}%</div>
+                        <div>Confidence: ${(face.confidence * 100).toFixed(1)}%</div>
+                        ${face.age ? `<div>Age: ${face.age}</div>` : ''}
+                        ${face.gender ? `<div>Gender: ${face.gender}</div>` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function showFaceDetails(faceId) {
+            // For single face details, you could expand this to show more info
+            fetch(`/face-image/${faceId}`)
+                .then(response => {
+                    if (response.ok) {
+                        window.open(`/face-image/${faceId}`, '_blank');
+                    }
+                });
+        }
+        
+        function closeFaceModal() {
+            document.getElementById('face-modal').classList.add('hidden');
+        }
+        
+        // Update statistics
+        function updateStats() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('stat-files').textContent = data.total_files;
+                    document.getElementById('stat-faces').textContent = data.total_faces;
+                    document.getElementById('stat-processing').textContent = data.processing_files;
+                    document.getElementById('stat-completed').textContent = data.completed_files;
+                });
+        }
+        
+        // WebSocket event handlers
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+        
+        socket.on('processing_update', function(data) {
+            // Handle real-time processing updates
+            console.log('Processing update:', data);
+        });
+    </script>
+</body>
+</html>

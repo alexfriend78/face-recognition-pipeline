@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg14
+    environment:
+      POSTGRES_USER: facerecog
+      POSTGRES_PASSWORD: facerecog123
+      POSTGRES_DB: face_recognition
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U facerecog"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "8000:5000"
+    environment:
+      DATABASE_URL: postgresql://facerecog:facerecog123@postgres:5432/face_recognition
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-here
+      UPLOAD_FOLDER: /app/data/raw
+      PROCESSED_FOLDER: /app/data/processed
+      EMBEDDINGS_FOLDER: /app/data/embeddings
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python app.py
+
+  celery:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://facerecog:facerecog123@postgres:5432/face_recognition
+      REDIS_URL: redis://redis:6379/0
+      UPLOAD_FOLDER: /app/data/raw
+      PROCESSED_FOLDER: /app/data/processed
+      EMBEDDINGS_FOLDER: /app/data/embeddings
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A celery_tasks worker --loglevel=info
+
+  flower:
+    build: .
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      - redis
+    command: celery -A celery_tasks flower --port=5555
+
+  folder-monitor:
+    image: face-recognition-pipeline-web  # Use the already built web image
+    volumes:
+      - ./data:/app/data
+    environment:
+      DATABASE_URL: postgresql://facerecog:facerecog123@postgres:5432/face_recognition
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+      - web  # Ensure web is built first
+    command: python folder_monitor.py --watch-folder /app/data/watch --process-existing
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: face-recognition-network
