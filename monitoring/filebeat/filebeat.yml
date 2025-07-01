@@ -1,0 +1,66 @@
+filebeat.inputs:
+- type: container
+  paths:
+    - '/var/lib/docker/containers/*/*.log'
+  
+  # Only collect logs from our face recognition services
+  include_lines: ['face-recognition']
+  
+  processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+  
+  - decode_json_fields:
+      fields: ["message"]
+      target: ""
+      overwrite_keys: true
+      
+  # Add custom fields
+  - add_fields:
+      target: ''
+      fields:
+        environment: development
+        application: face-recognition-pipeline
+
+# Configure multiline for Python tracebacks
+filebeat.inputs:
+- type: log
+  paths:
+    - /var/log/face-recognition/*.log
+  multiline.pattern: '^Traceback'
+  multiline.negate: true
+  multiline.match: after
+
+# Output to Logstash
+output.logstash:
+  hosts: ["logstash:5044"]
+
+# Alternative direct output to Elasticsearch (comment out logstash if using this)
+# output.elasticsearch:
+#   hosts: ["elasticsearch:9200"]
+#   index: "face-recognition-logs-%{+yyyy.MM.dd}"
+
+# Configure index template
+setup.template.settings:
+  index.number_of_shards: 1
+  index.codec: best_compression
+
+# Enable Kibana dashboards
+setup.dashboards.enabled: true
+setup.kibana:
+  host: "kibana:5601"
+
+# Logging configuration
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644
+
+# Monitoring
+monitoring.enabled: true
+monitoring.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+

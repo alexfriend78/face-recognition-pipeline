@@ -7,8 +7,10 @@ from watchdog.events import FileSystemEventHandler
 from pathlib import Path
 import logging
 from database_schema import get_session, UploadedFile
-from celery_tasks import process_uploaded_file
+from celery_tasks import process_uploaded_file, schedule_batch_processing, process_batch_images_optimized
 import hashlib
+from threading import Timer
+from collections import defaultdict
 
 class FaceRecognitionHandler(FileSystemEventHandler):
     """

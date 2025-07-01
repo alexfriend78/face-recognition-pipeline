@@ -1,0 +1,72 @@
+# prometheus.yml
+# Example Prometheus configuration for monitoring the face recognition pipeline
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Face Recognition Pipeline
+  - job_name: 'face-recognition-pipeline'
+    static_configs:
+      - targets: ['localhost:80']  # nginx proxy
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    
+  # Redis monitoring (if using redis_exporter)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['localhost:9121']  # redis_exporter
+    scrape_interval: 15s
+    
+  # PostgreSQL monitoring (if using postgres_exporter)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['localhost:9187']  # postgres_exporter
+    scrape_interval: 15s
+    
+  # Node metrics (if using node_exporter)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']  # node_exporter
+    scrape_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Example alerting rules (create alerts.yml)
+# - alert: HighErrorRate
+#   expr: face_recognition_files_processed_total{status="failed"} / face_recognition_files_processed_total > 0.1
+#   for: 5m
+#   labels:
+#     severity: warning
+#   annotations:
+#     summary: "High error rate in face recognition processing"
+#     description: "Error rate is {{ $value }} which is above threshold"
+# 
+# - alert: LongProcessingTime
+#   expr: face_recognition_file_processing_duration_seconds > 300
+#   for: 2m
+#   labels:
+#     severity: warning
+#   annotations:
+#     summary: "Long processing time detected"
+#     description: "File processing is taking {{ $value }} seconds"
+# 
+# - alert: LowCacheHitRate
+#   expr: face_recognition_cache_hit_ratio < 70
+#   for: 10m
+#   labels:
+#     severity: info
+#   annotations:
+#     summary: "Low cache hit rate"
+#     description: "Cache hit rate is {{ $value }}%"
+

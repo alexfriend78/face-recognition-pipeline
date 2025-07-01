@@ -89,3 +89,38 @@ create_test_image.py
 *.tmp
 *.temp
 
+# Monitoring data (exclude persistent volumes)
+monitoring/data/
+monitoring/logs/
+
+# Docker volumes and data
+docker-data/
+*_data/
+prometheus_data/
+grafana_data/
+alertmanager_data/
+elasticsearch_data/
+
+# Nginx logs
+nginx/logs/
+
+# Backup files
+*.tar.gz
+*.zip
+*.bak
+face-recognition-pipeline-backup-*.tar.gz
+
+# Sensitive configuration (keep templates)
+monitoring/alertmanager/alertmanager.yml.prod
+monitoring/grafana/grafana.ini.prod
+
+# SSL certificates
+*.pem
+*.crt
+*.key
+ssl/
+
+# Docker Compose override files
+docker-compose.override.yml
+docker-compose.prod.yml
+

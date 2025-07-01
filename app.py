@@ -1,5 +1,5 @@
 # app.py
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, g, Response
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
@@ -7,10 +7,19 @@ import uuid
 from werkzeug.utils import secure_filename
 from datetime import datetime
 import json
+import time
 from database_schema import get_session, UploadedFile, Face
-from celery_tasks import celery_app, process_uploaded_file, search_similar_faces
+from celery_tasks import celery_app, process_uploaded_file, search_similar_faces, schedule_batch_processing, process_batch_images_optimized
+from cache_helper import cache_helper
 from sqlalchemy import desc
-import logging
+
+# Configure structured logging and metrics
+from logging_config import configure_logging, get_logger
+from metrics import metrics, TimedOperation
+
+# Initialize logging
+configure_logging()
+logger = get_logger(__name__)
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -22,9 +31,41 @@ app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_UPLOAD_SIZE', 104857600)) 
 socketio = SocketIO(app, cors_allowed_origins="*", message_queue=os.getenv('REDIS_URL'))
 CORS(app)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Request ID middleware
+@app.before_request
+def before_request():
+    g.request_id = str(uuid.uuid4())
+    g.start_time = time.time()
+    
+    logger.info("Request started",
+               request_id=g.request_id,
+               method=request.method,
+               path=request.path,
+               remote_addr=request.remote_addr,
+               user_agent=request.headers.get('User-Agent', 'unknown'))
+
+@app.after_request
+def after_request(response):
+    duration = time.time() - g.start_time
+    
+    # Log request completion
+    logger.info("Request completed",
+               request_id=g.request_id,
+               method=request.method,
+               path=request.path,
+               status_code=response.status_code,
+               duration_seconds=duration)
+    
+    # Track metrics
+    endpoint = request.endpoint or 'unknown'
+    metrics.track_http_request(
+        method=request.method,
+        endpoint=endpoint,
+        status_code=response.status_code,
+        duration=duration
+    )
+    
+    return response
 
 # Allowed file extensions
 ALLOWED_IMAGE_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
@@ -169,6 +210,61 @@ def search_faces():
     
     return jsonify({'error': 'Invalid file type'}), 400
 
+@app.route('/upload-batch', methods=['POST'])
+def upload_batch():
+    """Handle batch file upload"""
+    if 'files' not in request.files:
+        return jsonify({'error': 'No files provided'}), 400
+    
+    files = request.files.getlist('files')
+    if not files:
+        return jsonify({'error': 'No files selected'}), 400
+    
+    file_ids = []
+    for file in files:
+        if file and allowed_file(file.filename):
+            # Generate unique filename
+            original_filename = secure_filename(file.filename)
+            file_ext = original_filename.rsplit('.', 1)[1].lower()
+            unique_filename = f"{uuid.uuid4()}.{file_ext}"
+            
+            # Save file
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+            file.save(file_path)
+            
+            # Determine file type
+            file_type = get_file_type(original_filename)
+            
+            # Save to database
+            session = get_session()
+            try:
+                uploaded_file = UploadedFile(
+                    filename=unique_filename,
+                    original_filename=original_filename,
+                    file_type=file_type,
+                    file_path=file_path,
+                    processing_status='pending'
+                )
+                session.add(uploaded_file)
+                session.commit()
+                file_ids.append(uploaded_file.id)
+
+            except Exception as e:
+                logger.error(f"Error saving file record: {str(e)}")
+                session.rollback()
+            finally:
+                session.close()
+    
+    # Schedule batch processing
+    if file_ids:
+        task = schedule_batch_processing.apply_async(
+            args=[file_ids, 4]
+        )
+        return jsonify({'task_id': task.id, 'file_count': len(file_ids)})
+    
+    return jsonify({'error': 'Failed to upload files'}), 500
+
 @app.route('/files')
 def list_files():
     """List all uploaded files"""
@@ -270,6 +366,74 @@ def get_stats():
         return jsonify(stats)
     finally:
         session.close()
+
+@app.route('/cache/stats')
+def get_cache_stats():
+    """Get Redis cache statistics"""
+    try:
+        cache_stats = cache_helper.get_cache_stats()
+        return jsonify({
+            'status': 'success',
+            'cache_stats': cache_stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {str(e)}")
+        return jsonify({'error': 'Failed to get cache statistics'}), 500
+
+@app.route('/cache/clear', methods=['POST'])
+def clear_cache():
+    """Clear search cache"""
+    try:
+        pattern = request.json.get('pattern', 'search:*') if request.is_json else 'search:*'
+        deleted_count = cache_helper.invalidate_search_cache(pattern)
+        return jsonify({
+            'status': 'success',
+            'message': f'Cleared {deleted_count} cache entries',
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        logger.error(f"Error clearing cache: {str(e)}")
+        return jsonify({'error': 'Failed to clear cache'}), 500
+
+@app.route('/cache')
+def cache_dashboard():
+    """Cache statistics dashboard"""
+    return render_template('cache_stats.html')
+
+@app.route('/metrics')
+def prometheus_metrics():
+    """Prometheus metrics endpoint"""
+    try:
+        from metrics import get_gpu_utilization, get_memory_usage
+        
+        # Update system metrics before returning
+        gpu_util = get_gpu_utilization()
+        memory_usage = get_memory_usage()
+        
+        # Get active task counts (simplified)
+        active_tasks = {
+            'file_processing': 0,  # Would query Celery inspect in production
+            'search': 0,
+            'batch_processing': 0
+        }
+        
+        metrics.update_system_metrics(
+            active_tasks=active_tasks,
+            db_connections=1,  # Would get actual count in production
+            gpu_util=gpu_util,
+            memory_usage=memory_usage
+        )
+        
+        # Update cache hit ratio
+        cache_stats = cache_helper.get_cache_stats()
+        if cache_stats:
+            hit_ratio = cache_stats.get('hit_rate', 0.0)
+            metrics.update_cache_hit_ratio(hit_ratio)
+        
+        return Response(metrics.get_metrics(), mimetype='text/plain')
+    except Exception as e:
+        logger.error(f"Error generating metrics: {str(e)}")
+        return Response('# Error generating metrics\n', mimetype='text/plain'), 500
 
 # WebSocket events for real-time updates
 @socketio.on('connect')

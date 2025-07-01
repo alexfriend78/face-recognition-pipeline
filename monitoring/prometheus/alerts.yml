@@ -1,0 +1,203 @@
+groups:
+  - name: face_recognition_alerts
+    rules:
+      # High error rate in file processing
+      - alert: HighFileProcessingErrorRate
+        expr: |
+          (
+            rate(face_recognition_files_processed_total{status="failed"}[5m]) / 
+            rate(face_recognition_files_processed_total[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "High error rate in face recognition file processing"
+          description: "Error rate is {{ $value | humanizePercentage }} which is above 10% threshold"
+
+      # Very high error rate (critical)
+      - alert: CriticalFileProcessingErrorRate
+        expr: |
+          (
+            rate(face_recognition_files_processed_total{status="failed"}[5m]) / 
+            rate(face_recognition_files_processed_total[5m])
+          ) > 0.3
+        for: 2m
+        labels:
+          severity: critical
+          service: face-recognition
+        annotations:
+          summary: "Critical error rate in face recognition file processing"
+          description: "Error rate is {{ $value | humanizePercentage }} which is above 30% threshold"
+
+      # Long processing time
+      - alert: LongFileProcessingTime
+        expr: |
+          histogram_quantile(0.95, rate(face_recognition_file_processing_duration_seconds_bucket[5m])) > 300
+        for: 3m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "Long file processing time detected"
+          description: "95th percentile processing time is {{ $value }} seconds (>5 minutes)"
+
+      # Very long processing time (critical)
+      - alert: VeryLongFileProcessingTime
+        expr: |
+          histogram_quantile(0.95, rate(face_recognition_file_processing_duration_seconds_bucket[5m])) > 600
+        for: 2m
+        labels:
+          severity: critical
+          service: face-recognition
+        annotations:
+          summary: "Very long file processing time detected"
+          description: "95th percentile processing time is {{ $value }} seconds (>10 minutes)"
+
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: face_recognition_cache_hit_ratio < 70
+        for: 10m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is {{ $value }}% which is below 70% threshold"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (face_recognition_memory_usage_bytes{type="rss"} / (1024*1024*1024)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanize }}GB which is above 2GB threshold"
+
+      # High search response time
+      - alert: HighSearchResponseTime
+        expr: |
+          histogram_quantile(0.95, rate(face_recognition_search_duration_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "High search response time"
+          description: "95th percentile search time is {{ $value }} seconds"
+
+      # No face uploads in the last hour
+      - alert: NoFileUploads
+        expr: |
+          increase(face_recognition_files_uploaded_total[1h]) == 0
+        for: 1h
+        labels:
+          severity: info
+          service: face-recognition
+        annotations:
+          summary: "No file uploads detected"
+          description: "No files have been uploaded in the last hour"
+
+      # High HTTP error rate
+      - alert: HighHTTPErrorRate
+        expr: |
+          (
+            rate(face_recognition_http_requests_total{status_code=~"5.."}[5m]) / 
+            rate(face_recognition_http_requests_total[5m])
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: face-recognition
+        annotations:
+          summary: "High HTTP error rate"
+          description: "HTTP 5xx error rate is {{ $value | humanizePercentage }}"
+
+  - name: infrastructure_alerts
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: |
+          100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% on {{ $labels.instance }}"
+
+      # High disk usage
+      - alert: HighDiskUsage
+        expr: |
+          (
+            (node_filesystem_size_bytes - node_filesystem_avail_bytes) / 
+            node_filesystem_size_bytes
+          ) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage detected"
+          description: "Disk usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      # PostgreSQL down
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL database is not responding"
+
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cache
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache server is not responding"
+
+      # Face recognition app down
+      - alert: FaceRecognitionAppDown
+        expr: up{job="face-recognition-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: face-recognition
+        annotations:
+          summary: "Face recognition application is down"
+          description: "The main face recognition application is not responding"
+
+      # High Redis memory usage
+      - alert: HighRedisMemoryUsage
+        expr: |
+          (redis_memory_used_bytes / redis_memory_max_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: cache
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+      # PostgreSQL connection limit approaching
+      - alert: PostgreSQLHighConnections
+        expr: |
+          (pg_stat_database_numbackends / pg_settings_max_connections) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "PostgreSQL connection limit approaching"
+          description: "PostgreSQL is using {{ $value | humanizePercentage }} of available connections"
+

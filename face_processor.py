@@ -10,6 +10,21 @@ from typing import List, Dict, Tuple, Optional
 import logging
 from PIL import Image
 import io
+import psutil
+import platform
+import subprocess
+
+try:
+    import onnxruntime as ort
+    ONNX_AVAILABLE = True
+except ImportError:
+    ONNX_AVAILABLE = False
+    
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
 
 class FaceProcessor:
     def __init__(self, model_name='buffalo_l', ctx_id=0, det_size=(640, 640)):

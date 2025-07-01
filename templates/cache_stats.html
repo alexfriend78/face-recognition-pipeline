@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cache Statistics</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        h1 { color: #333; }
+        .stats-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .stats-table th, .stats-table td { padding: 8px; text-align: left; border: 1px solid #ddd; }
+        .stats-table th { background-color: #f2f2f2; }
+    </style>
+</head>
+<body>
+    <h1>Redis Cache Statistics</h1>
+    <table class="stats-table" id="cache-stats">
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <button id="clear-cache">Clear Cache</button>
+
+    <script>
+        $(document).ready(function() {
+            function loadStats() {
+                $.getJSON("/cache/stats", function(data) {
+                    const statsTableBody = $('#cache-stats tbody');
+                    statsTableBody.empty();
+
+                    if (data.status === 'success') {
+                        const stats = data.cache_stats;
+                        for (const [key, value] of Object.entries(stats)) {
+                            const row = `<tr><td>${key}</td><td>${value}</td></tr>`;
+                            statsTableBody.append(row);
+                        }
+                    }
+                });
+            }
+
+            $('#clear-cache').click(function() {
+                $.post("/cache/clear", function(data) {
+                    alert(data.message);
+                    loadStats();
+                });
+            });
+
+            loadStats();
+        });
+    </script>
+</body>
+</html>
+
