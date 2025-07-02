@@ -29,35 +29,21 @@ receivers:
   - name: 'critical-alerts'
     email_configs:
       - to: 'admin@facerecognition.local'
-        subject: '[CRITICAL] Face Recognition Alert: {{ .GroupLabels.alertname }}'
-        body: |
-          {{ range .Alerts }}
-          Alert: {{ .Annotations.summary }}
-          Description: {{ .Annotations.description }}
-          Details:
-          {{ range .Labels.SortedPairs }}  - {{ .Name }}: {{ .Value }}
-          {{ end }}
-          {{ end }}
-    slack_configs:
-      - api_url: 'YOUR_SLACK_WEBHOOK_URL_HERE'
-        channel: '#alerts'
-        title: 'Critical Alert: Face Recognition System'
-        text: |
-          {{ range .Alerts }}
-          *Alert:* {{ .Annotations.summary }}
-          *Description:* {{ .Annotations.description }}
-          *Severity:* {{ .Labels.severity }}
-          {{ end }}
+    # Slack notifications (configure with your webhook URL)
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+    #     channel: '#alerts'
+    #     title: 'Critical Alert: Face Recognition System'
+    #     text: |
+    #       {{ range .Alerts }}
+    #       *Alert:* {{ .Annotations.summary }}
+    #       *Description:* {{ .Annotations.description }}
+    #       *Severity:* {{ .Labels.severity }}
+    #       {{ end }}
 
   - name: 'warning-alerts'
     email_configs:
       - to: 'team@facerecognition.local'
-        subject: '[WARNING] Face Recognition Alert: {{ .GroupLabels.alertname }}'
-        body: |
-          {{ range .Alerts }}
-          Alert: {{ .Annotations.summary }}
-          Description: {{ .Annotations.description }}
-          {{ end }}
 
   - name: 'face-recognition-alerts'
     webhook_configs:

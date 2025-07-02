@@ -59,7 +59,7 @@ services=(
 echo "Service Status:"
 echo "==============="
 for service in "${services[@]}"; do
-    if docker ps --format "table {{.Names}}" | grep -q "^${service}$"; then
+    if docker ps --format "{{.Names}}" | grep -q "${service}"; then
         echo "✅ $service - Running"
     else
         echo "❌ $service - Not running"
