@@ -32,6 +32,9 @@ COPY . .
 # Create data directories
 RUN mkdir -p data/raw data/processed/faces data/embeddings
 
+# Create prometheus multiproc directory
+RUN mkdir -p /tmp/prometheus_multiproc
+
 # Expose port
 EXPOSE 5000
 

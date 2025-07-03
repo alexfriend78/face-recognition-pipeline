@@ -66,29 +66,23 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(face_recognition_files_uploaded_total[5m])",
+          "expr": "rate(node_cpu_seconds_total{mode!=\"idle\"}[5m]) * 100",
           "interval": "",
-          "legendFormat": "Upload Rate",
+          "legendFormat": "CPU Usage - {{mode}}",
           "refId": "A"
         },
         {
-          "expr": "rate(face_recognition_files_processed_total{status=\"completed\"}[5m])",
+          "expr": "(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1024 / 1024",
           "interval": "",
-          "legendFormat": "Processing Rate (Success)",
+          "legendFormat": "Memory Usage (MB)",
           "refId": "B"
-        },
-        {
-          "expr": "rate(face_recognition_files_processed_total{status=\"failed\"}[5m])",
-          "interval": "",
-          "legendFormat": "Processing Rate (Failed)",
-          "refId": "C"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "File Processing Rates",
+      "title": "System Resource Usage",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -197,25 +191,19 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(face_recognition_file_processing_duration_seconds_bucket[5m]))",
+          "expr": "rate(node_network_receive_bytes_total[5m])",
           "interval": "",
-          "legendFormat": "50th percentile",
+          "legendFormat": "Network In - {{device}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, rate(face_recognition_file_processing_duration_seconds_bucket[5m]))",
+          "expr": "rate(node_network_transmit_bytes_total[5m])",
           "interval": "",
-          "legendFormat": "90th percentile",
+          "legendFormat": "Network Out - {{device}}",
           "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.95, rate(face_recognition_file_processing_duration_seconds_bucket[5m]))",
-          "interval": "",
-          "legendFormat": "95th percentile",
-          "refId": "C"
         }
       ],
-      "title": "File Processing Duration",
+      "title": "Network I/O",
       "type": "timeseries"
     },
     {
@@ -271,13 +259,13 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "face_recognition_cache_hit_ratio",
+          "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) * 100",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Cache Hit Ratio",
+      "title": "Redis Cache Hit Ratio",
       "type": "stat"
     },
     {
@@ -329,13 +317,13 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "face_recognition_memory_usage_bytes{type=\"rss\"}",
+          "expr": "redis_memory_used_bytes",
           "interval": "",
           "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Memory Usage (RSS)",
+      "title": "Redis Memory Usage",
       "type": "stat"
     },
     {
@@ -391,13 +379,13 @@
       "pluginVersion": "8.0.0",
       "targets": [
         {
-          "expr": "face_recognition_gpu_utilization_percent",
+          "expr": "pg_database_size_bytes / 1024 / 1024",
           "interval": "",
-          "legendFormat": "",
+          "legendFormat": "{{datname}}",
           "refId": "A"
         }
       ],
-      "title": "GPU Utilization",
+      "title": "Database Size (MB)",
       "type": "stat"
     },
     {
@@ -428,6 +416,155 @@
         "y": 8
       },
       "id": 6,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.0.0",
+      "targets": [
+        {
+          "expr": "redis_connected_clients",
+          "interval": "",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Redis Connected Clients",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "vis": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "increase(face_recognition_faces_detected_total[5m])",
+          "interval": "",
+          "legendFormat": "Faces Detected (5min) - {{source_type}}",
+          "refId": "A"
+        },
+        {
+          "expr": "face_recognition_faces_detected_total",
+          "interval": "",
+          "legendFormat": "Total Faces Detected - {{source_type}}",
+          "refId": "B"
+        }
+      ],
+      "title": "Face Detection Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 10
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 8,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
