@@ -60,13 +60,20 @@ chmod +x start-monitoring.sh
 
 **b. Run the Application:**
 
-Now, start the entire application stack using the script. This will build the Docker images and launch all services.
+Now, start the entire application stack using the script. This will automatically build the Docker images and launch all services.
 
 ```bash
 ./start-monitoring.sh
 ```
 
-> **Note:** The first time you run this, it will download all the necessary Docker images and build the application containers. This process can take **15-30 minutes**, depending on your internet connection and computer speed. Subsequent startups will be much faster.
+> **Important:** The first time you run this, the script will:
+> 1. **Build the application containers** from your local code (using the Dockerfile)
+> 2. **Download all necessary Docker images** for the monitoring stack
+> 3. **Start all services** in the correct order
+> 
+> This process can take **15-30 minutes** on the first run, depending on your internet connection and computer speed. Subsequent startups will be much faster since the images are cached.
+>
+> **No separate build step is needed** - the startup script handles everything automatically!
 
 ### For Windows Users (inside WSL 2):
 

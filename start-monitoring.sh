@@ -22,6 +22,10 @@ mkdir -p data/{watch,raw,processed,embeddings}
 # Set proper permissions for data directories
 chmod -R 755 data/
 
+echo "🔧 Building Docker images (this may take 15-30 minutes on first run)..."
+# Build the images first
+docker-compose build
+
 echo "🔧 Starting main application services..."
 # Start the main application first
 docker-compose up -d

@@ -55,7 +55,7 @@ cd face-recognition-pipeline
 # Make startup script executable
 chmod +x start-monitoring.sh
 
-# Run the application
+# Run the application (this will build images and start services)
 ./start-monitoring.sh
 ```
 
