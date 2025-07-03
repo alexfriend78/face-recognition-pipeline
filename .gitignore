@@ -124,3 +124,4 @@ ssl/
 docker-compose.override.yml
 docker-compose.prod.yml
 
+logs/*.log
