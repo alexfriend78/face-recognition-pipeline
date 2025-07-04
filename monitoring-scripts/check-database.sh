@@ -57,7 +57,7 @@ echo "===================="
 docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recognition -c "
 SELECT 
     schemaname,
-    tablename,
+    relname as table_name,
     n_tup_ins AS inserts,
     n_tup_upd AS updates,
     n_tup_del AS deletes,
@@ -117,11 +117,11 @@ SELECT
 FROM faces
 UNION ALL
 SELECT 
-    'Average confidence: ' || ROUND(AVG(confidence), 3)
+    'Average confidence: ' || ROUND(AVG(confidence)::numeric, 3)
 FROM faces
 UNION ALL
 SELECT 
-    'Files with faces: ' || COUNT(DISTINCT uploaded_file_id)
+    'Files with faces: ' || COUNT(DISTINCT file_id)
 FROM faces;
 "
 
@@ -134,9 +134,9 @@ SELECT
     original_filename,
     file_type,
     processing_status,
-    upload_date
+    upload_time
 FROM uploaded_files 
-ORDER BY upload_date DESC 
+ORDER BY upload_time DESC 
 LIMIT 10;
 "
 
@@ -147,10 +147,10 @@ docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recog
 SELECT 
     uf.original_filename,
     COUNT(f.id) as face_count,
-    ROUND(AVG(f.confidence), 3) as avg_confidence,
+    ROUND(AVG(f.confidence)::numeric, 3) as avg_confidence,
     uf.processing_status
 FROM uploaded_files uf
-LEFT JOIN faces f ON uf.id = f.uploaded_file_id
+LEFT JOIN faces f ON uf.id = f.file_id
 WHERE uf.processing_status = 'completed'
 GROUP BY uf.id, uf.original_filename, uf.processing_status
 HAVING COUNT(f.id) > 0
@@ -166,9 +166,8 @@ SELECT
     file_type,
     processing_status,
     COUNT(*) as files,
-    AVG(EXTRACT(EPOCH FROM (completed_at - upload_date))) as avg_processing_time_seconds
+    'N/A - no timing data' as processing_info
 FROM uploaded_files 
-WHERE completed_at IS NOT NULL
 GROUP BY file_type, processing_status
 ORDER BY file_type, processing_status;
 "
@@ -200,10 +199,10 @@ if [ "$failed_count" -gt 0 ]; then
     print_warning "$failed_count files have failed processing"
     echo "Recent failed files:"
     docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recognition -c "
-    SELECT original_filename, upload_date, error_message 
+    SELECT original_filename, upload_time 
     FROM uploaded_files 
     WHERE processing_status = 'failed' 
-    ORDER BY upload_date DESC 
+    ORDER BY upload_time DESC 
     LIMIT 5;
     "
 else
@@ -211,15 +210,15 @@ else
 fi
 
 # Check for stuck processing
-stuck_count=$(docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recognition -t -c "SELECT COUNT(*) FROM uploaded_files WHERE processing_status = 'processing' AND upload_date < NOW() - INTERVAL '1 hour';" 2>/dev/null | xargs)
+stuck_count=$(docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recognition -t -c "SELECT COUNT(*) FROM uploaded_files WHERE processing_status = 'processing' AND upload_time < NOW() - INTERVAL '1 hour';" 2>/dev/null | xargs)
 
 if [ "$stuck_count" -gt 0 ]; then
     print_warning "$stuck_count files appear to be stuck in processing (>1 hour)"
     docker exec face-recognition-pipeline-postgres-1 psql -U facerecog -d face_recognition -c "
-    SELECT original_filename, upload_date 
+    SELECT original_filename, upload_time 
     FROM uploaded_files 
-    WHERE processing_status = 'processing' AND upload_date < NOW() - INTERVAL '1 hour'
-    ORDER BY upload_date DESC;
+    WHERE processing_status = 'processing' AND upload_time < NOW() - INTERVAL '1 hour'
+    ORDER BY upload_time DESC;
     "
 else
     print_success "No stuck processing files found"
