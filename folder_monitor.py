@@ -6,11 +6,15 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from pathlib import Path
 import logging
+from logging_config import configure_logging, get_logger
 from database_schema import get_session, UploadedFile
 from celery_tasks import process_uploaded_file, schedule_batch_processing, process_batch_images_optimized
 import hashlib
 from threading import Timer
 from collections import defaultdict
+
+# Ensure logging is configured
+configure_logging()
 
 class FaceRecognitionHandler(FileSystemEventHandler):
     """

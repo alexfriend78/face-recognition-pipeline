@@ -8,12 +8,15 @@ from database_schema import get_session, UploadedFile, Face
 from face_processor import FaceProcessor
 from sqlalchemy.orm import Session
 from cache_helper import cache_helper
-from logging_config import get_logger
+from logging_config import configure_logging, get_logger
 from metrics import metrics, TimedOperation
 import hashlib
 from datetime import datetime
 from typing import List, Dict, Tuple
 import time
+
+# Ensure logging is configured for Celery workers
+configure_logging()
 
 # Initialize Celery
 celery_app = Celery(

@@ -12,7 +12,10 @@ class MetricsCollector:
     
     def __init__(self):
         # Use multiprocess mode for production with multiple workers
-        if os.getenv('PROMETHEUS_MULTIPROC_DIR'):
+        multiproc_dir = os.getenv('PROMETHEUS_MULTIPROC_DIR')
+        if multiproc_dir:
+            # Ensure the directory exists
+            os.makedirs(multiproc_dir, exist_ok=True)
             self.registry = CollectorRegistry()
             multiprocess.MultiProcessCollector(self.registry)
         else:

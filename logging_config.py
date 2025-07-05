@@ -73,7 +73,24 @@ def configure_logging():
 
 def get_logger(name: str = None):
     """Get a structured logger instance"""
-    return structlog.get_logger(name)
+    try:
+        # Ensure logging is configured before returning a logger
+        if not hasattr(structlog, '_configured') or not structlog._configured:
+            configure_logging()
+        return structlog.get_logger(name)
+    except Exception as e:
+        # Fallback to standard logger if structlog fails
+        import logging
+        fallback_logger = logging.getLogger(name or __name__)
+        if not fallback_logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            handler.setFormatter(formatter)
+            fallback_logger.addHandler(handler)
+            fallback_logger.setLevel(logging.INFO)
+        return fallback_logger
 
 
 # Custom context processors

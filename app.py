@@ -435,6 +435,23 @@ def prometheus_metrics():
         logger.error(f"Error generating metrics: {str(e)}")
         return Response('# Error generating metrics\n', mimetype='text/plain'), 500
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring"""
+    try:
+        # Simple check to ensure the app is responsive
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'service': 'face-recognition-pipeline'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
 # WebSocket events for real-time updates
 @socketio.on('connect')
 def handle_connect():
