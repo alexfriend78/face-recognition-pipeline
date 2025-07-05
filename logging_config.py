@@ -13,9 +13,15 @@ def configure_logging():
     # Configure timestamper
     timestamper = structlog.processors.TimeStamper(fmt="ISO", utc=True)
     
+    # Safe filter to handle None logger
+    def safe_filter_by_level(logger, method_name, event_dict):
+        if logger is None:
+            return event_dict
+        return structlog.stdlib.filter_by_level(logger, method_name, event_dict)
+    
     # Configure shared processors
     shared_processors = [
-        structlog.stdlib.filter_by_level,
+        safe_filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),

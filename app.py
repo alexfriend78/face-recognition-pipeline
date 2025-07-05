@@ -462,4 +462,15 @@ def handle_disconnect():
     print('Client disconnected')
 
 if __name__ == '__main__':
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    # Configure Werkzeug logging to prevent None logger errors
+    import logging
+    
+    # Suppress Werkzeug logging errors by setting up a proper handler
+    werkzeug_logger = logging.getLogger('werkzeug')
+    werkzeug_logger.setLevel(logging.ERROR)  # Only show errors
+    
+    # Remove all existing handlers and add a null handler to prevent None logger issues
+    werkzeug_logger.handlers.clear()
+    werkzeug_logger.addHandler(logging.NullHandler())
+    
+    socketio.run(app, debug=False, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
