@@ -120,6 +120,62 @@ This will start all required services:
 - **🐘 Postgres Exporter**: http://localhost:9187
 - **📦 cAdvisor**: http://localhost:8080
 
+## 📖 Documentation
+
+### Comprehensive Guides
+- **[DEPLOYMENT_UPDATE_GUIDE.md](DEPLOYMENT_UPDATE_GUIDE.md)** - Complete deployment and update procedures for CentOS/RHEL, Ubuntu, and Windows
+- **[MONITORING_GUIDE.md](MONITORING_GUIDE.md)** - Comprehensive monitoring setup and configuration
+- **[LINUX_INSTALLATION_GUIDE.md](LINUX_INSTALLATION_GUIDE.md)** - Detailed Linux installation instructions
+- **[WORKER_SCALING_GUIDE.md](WORKER_SCALING_GUIDE.md)** - Worker scaling and performance optimization
+
+### Quick Scripts
+- **`update.sh`** - Automated update script for Linux/macOS
+- **`update.ps1`** - Automated update script for Windows
+- **`backup.sh`** - Complete backup creation script
+- **`start-monitoring.sh`** - Start complete monitoring stack
+- **`stop-monitoring.sh`** - Stop all services
+
+## 🔄 Deployment & Updates
+
+### Production Deployment
+For production deployments on CentOS/RHEL, Ubuntu, or Windows environments, see the comprehensive [DEPLOYMENT_UPDATE_GUIDE.md](DEPLOYMENT_UPDATE_GUIDE.md) which covers:
+- Platform-specific installation procedures
+- Automated update processes
+- System service integration
+- Rollback procedures
+- Troubleshooting guides
+
+### Quick Update (Linux/macOS)
+```bash
+# Automated update with backup and health checks
+./update.sh
+```
+
+### Quick Update (Windows)
+```powershell
+# Automated update with backup and health checks
+.\update.ps1
+```
+
+### Manual Update Process
+```bash
+# 1. Create backup
+./backup.sh
+
+# 2. Stop services
+docker-compose down
+
+# 3. Pull latest changes
+git pull origin main
+
+# 4. Rebuild and restart
+docker-compose build --no-cache
+docker-compose up -d
+
+# 5. Verify health
+curl http://localhost/health
+```
+
 ## 📁 Project Structure
 
 ```
